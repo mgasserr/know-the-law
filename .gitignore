@@ -1,0 +1,21 @@
+# Python / Backend Dependencies
+venv/
+.venv/
+__pycache__/
+
+# Frontend Dependencies
+node_modules/
+dist/
+
+# Machine Learning & AI Models
+.cache/
+.hf_cache/
+models/
+*.safetensors
+*.pt
+*.gguf
+
+# Vector Databases (Qdrant)
+qdrant_storage/
+qdrant_data/
+*.snapshot
