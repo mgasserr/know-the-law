@@ -1,14 +1,15 @@
 """
-OSTEP RAG QA API
------------------
-FastAPI backend serving a retrieval-augmented Q&A system grounded in the
-'Operating Systems: Three Easy Pieces' (OSTEP) textbook.
+Egyptian Civil Code RAG QA API
+-------------------------------
+FastAPI backend serving a retrieval-augmented Q&A system grounded in
+'qanoon el madany summarized.pdf'.
 
-Pipeline: PyMuPDF -> RecursiveCharacterTextSplitter -> bge-small embeddings
-          -> ChromaDB -> Qwen2.5-7B-Instruct (4-bit NF4, when CUDA available)
+Pipeline: PyMuPDF -> TextSplitter + Regex Cleaning -> BGE-M3 (Multilingual) 
+          -> ChromaDB -> Qwen2.5-7B-Instruct (4-bit NF4)
 """
 
 import sys
+import re
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -16,8 +17,6 @@ import torch
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-
-import re
 
 # LangChain Imports
 from langchain_community.document_loaders import PyMuPDFLoader
@@ -38,25 +37,29 @@ from transformers import (
 # --------------------------------------------------------------------------- #
 # Configuration
 # --------------------------------------------------------------------------- #
-PDF_PATH = "Operating Systems Three Easy Pieces (OSTEP) (Arpaci-Dusseau).pdf"
-VECTOR_DB_DIR = "./ostep_chroma_db"
+# Resolve the directory where this python script is located
+BASE_DIR = Path(__file__).resolve().parent
+# Go one level up (.parent), into the 'data' folder, to the PDF
+PDF_PATH = str(BASE_DIR.parent / "data" / "qanoon el madany summarized.pdf")
+
+VECTOR_DB_DIR = "./qanoon_chroma_db"
 MODEL_ID = "Qwen/Qwen2.5-7B-Instruct"
-EMBEDDING_MODEL_ID = "BAAI/bge-small-en-v1.5"
+
+# Swapped to a multilingual embedding model capable of understanding Arabic
+EMBEDDING_MODEL_ID = "BAAI/bge-m3"
 
 SYSTEM_PROMPT = (
-    "You are an expert Operating Systems Teaching Assistant strictly grounded "
-    "in the textbook 'Operating Systems: Three Easy Pieces' (OSTEP).\n"
-    "Answer the user's question using ONLY the provided context excerpts from "
-    "the textbook.\n"
-    "If the context does not contain enough information to answer the "
-    "question, state honestly that the topic is not covered in the provided "
-    "OSTEP excerpts. Do not fabricate answers or use outside knowledge."
+    "أنت مساعد قانوني مصري خبير، ومهمتك هي الإجابة على أسئلة المستخدم بالاعتماد حصرياً "
+    "على المقتطفات المقدمة من 'القانون المدني المصري'.\n"
+    "أجب باللغة العربية (أو بأسلوب مصري مهني وواضح) بناءً على السياق فقط واذكر رقم المادة القانونية متى أمكن.\n"
+    "إذا كان السياق لا يحتوي على معلومات كافية للإجابة، فقل بصراحة أن الموضوع غير مغطى "
+    "في المقتطفات المقدمة ولا تخترع إجابة من عندك أو تستخدم معلومات خارجية."
 )
 
-USER_TEMPLATE = "Context from OSTEP:\n{context}\n\nQuestion: {question}"
+USER_TEMPLATE = "السياق من القانون المدني:\n{context}\n\nالسؤال: {question}"
 
 rag_chain = None
-tokenizer_global = None  # kept so the prompt builder can reuse the chat template
+tokenizer_global = None
 
 
 # --------------------------------------------------------------------------- #
@@ -94,13 +97,13 @@ def initialize_vector_store(embedding_model: HuggingFaceEmbeddings) -> Chroma:
 
     print("[*] Scrubbing OCR artifacts via Regex...")
     for doc in raw_docs:
-        # 1. Fix inverted brackets with dollar signs (e.g., "مادة $(1)-13$" -> "مادة 13 (1)")
+        # Fix inverted brackets with dollar signs (e.g., "مادة $(1)-13$" -> "مادة 13 (1)")
         doc.page_content = re.sub(r'مادة\s*\$\((\d+)\)-(\d+)\$?', r'مادة \2 (\1)', doc.page_content)
         
-        # 2. Strip rogue Latin letters/dollar signs in simple headers (e.g., "مادة $Y-28$" -> "مادة 28")
+        # Strip rogue Latin letters/dollar signs in simple headers (e.g., "مادة $Y-28$" -> "مادة 28")
         doc.page_content = re.sub(r'مادة\s*\$?[a-zA-Z]?\s*-?\s*(\d+)', r'مادة \1', doc.page_content)
         
-        # 3. Catch-all: remove any remaining stray dollar signs so the LLM doesn't try to parse them as LaTeX
+        # Remove any remaining stray dollar signs
         doc.page_content = doc.page_content.replace('$', '')
 
     text_splitter = RecursiveCharacterTextSplitter(
@@ -109,7 +112,6 @@ def initialize_vector_store(embedding_model: HuggingFaceEmbeddings) -> Chroma:
         separators=["\n\n", "\n", " ", ""],
     )
     
-    # Pass the scrubbed documents to the splitter
     chunks = text_splitter.split_documents(raw_docs)
     print(f"[+] Generated {len(chunks)} semantic chunks.")
 
@@ -124,12 +126,6 @@ def initialize_vector_store(embedding_model: HuggingFaceEmbeddings) -> Chroma:
 
 
 def load_llm_pipeline() -> tuple[HuggingFacePipeline, AutoTokenizer]:
-    """
-    Loads Qwen2.5-7B-Instruct.
-    Uses 4-bit NF4 quantization when CUDA is available (required for
-    bitsandbytes); falls back to full-precision CPU inference otherwise
-    so the app doesn't hard-crash on a machine without a GPU.
-    """
     cuda_available = torch.cuda.is_available()
     bf16_ok = cuda_available and torch.cuda.is_bf16_supported()
     compute_dtype = torch.bfloat16 if bf16_ok else torch.float16
@@ -176,16 +172,6 @@ def load_llm_pipeline() -> tuple[HuggingFacePipeline, AutoTokenizer]:
 
 
 def build_prompt_runnable(tokenizer: AutoTokenizer) -> RunnableLambda:
-    """
-    Builds the prompt via the model's own chat template instead of a
-    hand-rolled ChatML string, so the pipeline still produces a correctly
-    formatted prompt if MODEL_ID is ever swapped for a non-Qwen model.
-
-    Implemented as a RunnableLambda (not a PromptTemplate subclass) since
-    PromptTemplate.format() is not a safe override point in LangChain's
-    current LCEL internals.
-    """
-
     def render(inputs: dict) -> str:
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -207,9 +193,9 @@ def format_docs(docs) -> str:
     formatted = []
     for i, doc in enumerate(docs, 1):
         raw_page = doc.metadata.get("page")
-        # PyMuPDFLoader pages are 0-indexed; show human-readable page numbers.
         page_display = raw_page + 1 if isinstance(raw_page, int) else "Unknown"
-        formatted.append(f"--- [Excerpt {i} | Page {page_display}] ---\n{doc.page_content.strip()}")
+        # Adjusted formatting for Arabic right-to-left flow
+        formatted.append(f"--- [مقتطف {i} | صفحة {page_display}] ---\n{doc.page_content.strip()}")
     return "\n\n".join(formatted)
 
 
@@ -220,7 +206,7 @@ def format_docs(docs) -> str:
 async def lifespan(app: FastAPI):
     global rag_chain, tokenizer_global
     print("\n" + "=" * 60)
-    print("Initializing OSTEP RAG System...")
+    print("Initializing Egyptian Civil Code RAG System...")
     print("=" * 60)
     try:
         embedding_model = get_embedding_model()
@@ -240,10 +226,10 @@ async def lifespan(app: FastAPI):
         print(f"\n[FATAL] Error initializing RAG pipeline: {exc}\n", file=sys.stderr)
 
     yield
-    print("Shutting down OSTEP RAG System...")
+    print("Shutting down RAG System...")
 
 
-app = FastAPI(title="OSTEP RAG QA API", lifespan=lifespan)
+app = FastAPI(title="Egyptian Civil Code RAG API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -260,7 +246,7 @@ app.add_middleware(
 
 
 class ChatRequest(BaseModel):
-    question: str = Field(..., description="User query regarding Operating Systems")
+    question: str = Field(..., description="User query regarding the Egyptian Civil Code")
 
 
 class ChatResponse(BaseModel):
@@ -284,7 +270,8 @@ def chat(request: ChatRequest):
         raw_output = rag_chain.invoke(question)
         clean_output = raw_output.strip()
         if not clean_output:
-            clean_output = "The textbook does not contain sufficient information on this topic."
+            # Replaced the fallback message with an Arabic equivalent
+            clean_output = "عذراً، المقتطفات المقدمة من القانون المدني لا تحتوي على معلومات كافية للإجابة على هذا السؤال."
         return ChatResponse(answer=clean_output)
     except Exception as err:
         raise HTTPException(status_code=500, detail=f"Inference pipeline failure: {err}") from err
