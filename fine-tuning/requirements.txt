@@ -1,0 +1,29 @@
+# --------------------------------------------------------------------------
+# Install torch FIRST, from the CUDA 12.8 index, before this file:
+#
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+#
+# RTX 5060 is Blackwell (sm_120). PyTorch only gained NATIVE stable sm_120
+# support starting at 2.7.0 with cu128 wheels -- anything older will either
+# fail to see the GPU or silently fall back to slow PTX JIT. Do not `pip
+# install torch` from this requirements.txt with the default PyPI index.
+# --------------------------------------------------------------------------
+
+transformers==4.46.3
+peft==0.13.2
+trl==0.12.1
+datasets==3.1.0
+accelerate==1.1.1
+bitsandbytes==0.44.1
+sentencepiece==0.2.0
+protobuf==3.20.2
+
+# OCR
+paddlepaddle-gpu==2.6.2       # swap for paddlepaddle==2.6.2 (CPU) if not OCR'ing on GPU
+paddleocr==2.9.1
+pymupdf==1.24.13
+pillow==10.4.0
+
+# utils
+numpy==1.26.4
+tqdm==4.66.5
