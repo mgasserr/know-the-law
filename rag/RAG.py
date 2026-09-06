@@ -17,6 +17,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+import re
+
 # LangChain Imports
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -90,11 +92,24 @@ def initialize_vector_store(embedding_model: HuggingFaceEmbeddings) -> Chroma:
     raw_docs = loader.load()
     print(f"[+] Ingested {len(raw_docs)} pages.")
 
+    print("[*] Scrubbing OCR artifacts via Regex...")
+    for doc in raw_docs:
+        # 1. Fix inverted brackets with dollar signs (e.g., "مادة $(1)-13$" -> "مادة 13 (1)")
+        doc.page_content = re.sub(r'مادة\s*\$\((\d+)\)-(\d+)\$?', r'مادة \2 (\1)', doc.page_content)
+        
+        # 2. Strip rogue Latin letters/dollar signs in simple headers (e.g., "مادة $Y-28$" -> "مادة 28")
+        doc.page_content = re.sub(r'مادة\s*\$?[a-zA-Z]?\s*-?\s*(\d+)', r'مادة \1', doc.page_content)
+        
+        # 3. Catch-all: remove any remaining stray dollar signs so the LLM doesn't try to parse them as LaTeX
+        doc.page_content = doc.page_content.replace('$', '')
+
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=900,
         chunk_overlap=150,
         separators=["\n\n", "\n", " ", ""],
     )
+    
+    # Pass the scrubbed documents to the splitter
     chunks = text_splitter.split_documents(raw_docs)
     print(f"[+] Generated {len(chunks)} semantic chunks.")
 
