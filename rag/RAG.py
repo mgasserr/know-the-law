@@ -1,13 +1,3 @@
-"""
-Egyptian Civil Code RAG QA API
--------------------------------
-FastAPI backend serving a retrieval-augmented Q&A system grounded in
-'qanoon el madany summarized.pdf'.
-
-Pipeline: PyMuPDF -> TextSplitter + Regex Cleaning -> BGE-M3 (Multilingual) 
-          -> ChromaDB -> Qwen2.5-7B-Instruct (4-bit NF4)
-"""
-
 import sys
 import re
 from pathlib import Path
@@ -37,40 +27,40 @@ from transformers import (
 # --------------------------------------------------------------------------- #
 # Configuration
 # --------------------------------------------------------------------------- #
-# Resolve the directory where this python script is located
 BASE_DIR = Path(__file__).resolve().parent
-# Go one level up (.parent), into the 'data' folder, to the PDF
-PDF_PATH = str(BASE_DIR.parent / "data" / "qanoon el madany summarized.pdf")
+
+# Define all PDF paths in a list
+PDF_PATHS = [
+    str(BASE_DIR.parent / "data" / "qanoon el madany summarized.pdf"),
+    str(BASE_DIR.parent / "data" / "mo5tarat mn a7kam el naqd.pdf"),
+    str(BASE_DIR.parent / "data" / "mabade2 qanoneya sadera 3n ma7kamet el naqd.pdf")
+]
 
 VECTOR_DB_DIR = "./qanoon_chroma_db"
 MODEL_ID = "Qwen/Qwen2.5-7B-Instruct"
-
-# Swapped to a multilingual embedding model capable of understanding Arabic
 EMBEDDING_MODEL_ID = "BAAI/bge-m3"
 
 SYSTEM_PROMPT = (
     "أنت مساعد قانوني مصري خبير، ومهمتك هي الإجابة على أسئلة المستخدم بالاعتماد حصرياً "
-    "على المقتطفات المقدمة من 'القانون المدني المصري'.\n"
-    "أجب باللغة العربية (أو بأسلوب مصري مهني وواضح) بناءً على السياق فقط واذكر رقم المادة القانونية متى أمكن.\n"
-    "إذا كان السياق لا يحتوي على معلومات كافية للإجابة، فقل بصراحة أن الموضوع غير مغطى "
-    "في المقتطفات المقدمة ولا تخترع إجابة من عندك أو تستخدم معلومات خارجية."
+    "على المقتطفات المقدمة.\n"
+    "أجب باللغة العربية بناءً على السياق فقط واذكر رقم المادة القانونية متى أمكن.\n"
+    "إذا كان السياق لا يحتوي على معلومات كافية للإجابة، فقل بصراحة أن الموضوع غير مغطى."
 )
 
-USER_TEMPLATE = "السياق من القانون المدني:\n{context}\n\nالسؤال: {question}"
+USER_TEMPLATE = "السياق من القانون المصري:\n{context}\n\nالسؤال: {question}"
 
 rag_chain = None
 tokenizer_global = None
 
 
 # --------------------------------------------------------------------------- #
-# Component builders
+# Component Builders
 # --------------------------------------------------------------------------- #
 def get_embedding_model() -> HuggingFaceEmbeddings:
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"[*] Initializing embeddings ({EMBEDDING_MODEL_ID}) on {device}...")
+    print(f"[*] Initializing embeddings ({EMBEDDING_MODEL_ID}) on CPU...")
     return HuggingFaceEmbeddings(
         model_name=EMBEDDING_MODEL_ID,
-        model_kwargs={"device": device},
+        model_kwargs={"device": "cpu"},
         encode_kwargs={"normalize_embeddings": True},
     )
 
@@ -85,25 +75,25 @@ def initialize_vector_store(embedding_model: HuggingFaceEmbeddings) -> Chroma:
             embedding_function=embedding_model,
         )
 
-    if not Path(PDF_PATH).exists():
-        raise FileNotFoundError(
-            f"'{PDF_PATH}' not found in project directory. Please provide the correct PDF file."
-        )
+    raw_docs = []
+    for pdf_path in PDF_PATHS:
+        if not Path(pdf_path).exists():
+            print(f"[!] Warning: '{pdf_path}' not found. Skipping.")
+            continue
+            
+        print(f"[*] Ingesting '{pdf_path}' via PyMuPDF...")
+        loader = PyMuPDFLoader(pdf_path)
+        raw_docs.extend(loader.load())
 
-    print(f"[*] Ingesting '{PDF_PATH}' via PyMuPDF...")
-    loader = PyMuPDFLoader(PDF_PATH)
-    raw_docs = loader.load()
-    print(f"[+] Ingested {len(raw_docs)} pages.")
+    if not raw_docs:
+        raise FileNotFoundError("None of the specified PDF files were found in the project directory.")
 
+    print(f"[+] Ingested a total of {len(raw_docs)} pages.")
     print("[*] Scrubbing OCR artifacts via Regex...")
+    
     for doc in raw_docs:
-        # Fix inverted brackets with dollar signs (e.g., "مادة $(1)-13$" -> "مادة 13 (1)")
         doc.page_content = re.sub(r'مادة\s*\$\((\d+)\)-(\d+)\$?', r'مادة \2 (\1)', doc.page_content)
-        
-        # Strip rogue Latin letters/dollar signs in simple headers (e.g., "مادة $Y-28$" -> "مادة 28")
         doc.page_content = re.sub(r'مادة\s*\$?[a-zA-Z]?\s*-?\s*(\d+)', r'مادة \1', doc.page_content)
-        
-        # Remove any remaining stray dollar signs
         doc.page_content = doc.page_content.replace('$', '')
 
     text_splitter = RecursiveCharacterTextSplitter(
@@ -148,8 +138,7 @@ def load_llm_pipeline() -> tuple[HuggingFacePipeline, AutoTokenizer]:
             trust_remote_code=True,
         )
     else:
-        print(f"[*] No CUDA device found. Loading LLM ({MODEL_ID}) on CPU in float32. "
-              "This will be slow.")
+        print(f"[*] No CUDA device found. Loading LLM ({MODEL_ID}) on CPU in float32.")
         model = AutoModelForCausalLM.from_pretrained(
             MODEL_ID,
             device_map="cpu",
@@ -163,9 +152,6 @@ def load_llm_pipeline() -> tuple[HuggingFacePipeline, AutoTokenizer]:
         tokenizer=tokenizer,
         max_new_tokens=512,
         temperature=0.2,
-        top_p=0.9,
-        repetition_penalty=1.1,
-        return_full_text=False,
     )
 
     return HuggingFacePipeline(pipeline=pipe), tokenizer
@@ -194,24 +180,46 @@ def format_docs(docs) -> str:
     for i, doc in enumerate(docs, 1):
         raw_page = doc.metadata.get("page")
         page_display = raw_page + 1 if isinstance(raw_page, int) else "Unknown"
-        # Adjusted formatting for Arabic right-to-left flow
-        formatted.append(f"--- [مقتطف {i} | صفحة {page_display}] ---\n{doc.page_content.strip()}")
+        
+        # Optionally extract source document name for better context referencing
+        source = doc.metadata.get("source", "Unknown Document")
+        source_name = Path(source).name
+        
+        formatted.append(f"--- [مقتطف {i} | المصدر: {source_name} | صفحة {page_display}] ---\n{doc.page_content.strip()}")
     return "\n\n".join(formatted)
 
 
+def extract_answer(full_text: str) -> str:
+    """Slices the raw LLM output to isolate the assistant response and drops over-generation."""
+    marker = "<|im_start|>assistant"
+    
+    # 1. Isolate the assistant's part
+    if marker in full_text:
+        output = full_text.split(marker)[-1]
+    else:
+        output = full_text
+        
+    # 2. Hard cutoff at the end-of-turn token to eliminate hallucinated text
+    stop_token = "<|im_end|>"
+    if stop_token in output:
+        output = output.split(stop_token)[0]
+        
+    return output.strip()
+
+
 # --------------------------------------------------------------------------- #
-# FastAPI app + lifecycle
+# FastAPI App & Lifecycle
 # --------------------------------------------------------------------------- #
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global rag_chain, tokenizer_global
     print("\n" + "=" * 60)
-    print("Initializing Egyptian Civil Code RAG System...")
+    print("Initializing Egyptian Law RAG System...")
     print("=" * 60)
     try:
         embedding_model = get_embedding_model()
         vector_store = initialize_vector_store(embedding_model)
-        retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
+        retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
         llm, tokenizer_global = load_llm_pipeline()
 
         custom_prompt = build_prompt_runnable(tokenizer_global)
@@ -220,6 +228,7 @@ async def lifespan(app: FastAPI):
             | custom_prompt
             | llm
             | StrOutputParser()
+            | RunnableLambda(extract_answer)
         )
         print("\n[+] RAG Chain successfully compiled and active.\n")
     except Exception as exc:
@@ -229,7 +238,7 @@ async def lifespan(app: FastAPI):
     print("Shutting down RAG System...")
 
 
-app = FastAPI(title="Egyptian Civil Code RAG API", lifespan=lifespan)
+app = FastAPI(title="Egyptian Law RAG API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -246,7 +255,7 @@ app.add_middleware(
 
 
 class ChatRequest(BaseModel):
-    question: str = Field(..., description="User query regarding the Egyptian Civil Code")
+    question: str = Field(..., description="User query regarding Egyptian Law")
 
 
 class ChatResponse(BaseModel):
@@ -270,8 +279,7 @@ def chat(request: ChatRequest):
         raw_output = rag_chain.invoke(question)
         clean_output = raw_output.strip()
         if not clean_output:
-            # Replaced the fallback message with an Arabic equivalent
-            clean_output = "عذراً، المقتطفات المقدمة من القانون المدني لا تحتوي على معلومات كافية للإجابة على هذا السؤال."
+            clean_output = "عذراً، المقتطفات المقدمة لا تحتوي على معلومات كافية."
         return ChatResponse(answer=clean_output)
     except Exception as err:
         raise HTTPException(status_code=500, detail=f"Inference pipeline failure: {err}") from err

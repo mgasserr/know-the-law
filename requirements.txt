@@ -1,0 +1,67 @@
+# =============================================================================
+# know-the-law — full Python requirements (rag/ backend + fine-tuning/)
+# =============================================================================
+# Covers only the Python side. The `frontend/` React app is managed
+# separately via its own package.json / npm — nothing here applies to it.
+#
+# Python: >=3.10 required (peft 0.18+ dropped 3.9; trl 1.x requires >=3.10).
+#
+# -----------------------------------------------------------------------
+# STEP 1 — install PyTorch FIRST, separately, matching your GPU
+# -----------------------------------------------------------------------
+# Your GPU (RTX 5060) is Blackwell architecture (compute capability sm_120).
+# That requires PyTorch >= 2.7 built against CUDA 12.8+ ("cu128" wheels).
+# An older cu121/cu118 build will NOT run kernels on this GPU.
+#
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+#
+# Verify afterwards with:
+#   python -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+#
+# Do NOT put torch in this file — installing it via a plain `pip install -r`
+# would pull the CPU-only build from PyPI instead of the CUDA build above.
+#
+# -----------------------------------------------------------------------
+# STEP 2 — then install everything else
+# -----------------------------------------------------------------------
+#   pip install -r requirements.txt
+# =============================================================================
+
+
+# --- Web backend (rag/RAG.py) ------------------------------------------------
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+pydantic>=2.9,<3.0
+
+# --- Core HF stack (shared by rag/ and fine-tuning/) -------------------------
+# transformers v5 (current major line) requires peft>=0.18.0 — do not
+# downgrade peft below that if you're on transformers 5.x, and vice versa.
+transformers>=5.0,<6.0
+accelerate>=1.0,<2.0
+peft>=0.18.0,<1.0
+bitsandbytes>=0.49.0
+datasets>=3.0,<4.0
+
+# --- Fine-tuning only (fine-tuning/train_qlora.py) ---------------------------
+# trl moved to a 1.x versioning line; pin a floor recent enough to be
+# compatible with transformers v5 + peft 0.18, without chasing daily builds.
+trl>=1.4.0,<2.0
+
+# --- RAG / document pipeline (rag/RAG.py, fine-tuning/data_prep.py) ----------
+pymupdf>=1.24
+
+# langchain-huggingface 1.x split HuggingFaceEmbeddings/HuggingFacePipeline
+# into an optional extra — [full] pulls in a compatible sentence-transformers
+# and transformers automatically. sentence-transformers is listed explicitly
+# too since HuggingFaceEmbeddings (bge-m3) depends on it directly.
+langchain-core>=1.0,<2.0
+langchain-text-splitters>=0.3.7,<1.0
+langchain-community>=0.4,<0.5
+langchain-chroma>=1.0,<2.0
+langchain-huggingface[full]>=1.0,<2.0
+sentence-transformers>=5.2.0
+
+# --- Tokenizer dependencies ---------------------------------------------------
+# bge-m3 (an XLM-RoBERTa-based embedding model) needs sentencepiece.
+sentencepiece>=0.2.0
+protobuf>=4.25,<6.0
