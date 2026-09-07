@@ -1,0 +1,78 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  background-color: var(--neutral-50);
+  font-family: var(--font-family-primary);
+  direction: rtl;
+}
+
+/* Layout structure */
+.app > :nth-child(1) {
+  /* Header */
+  order: 1;
+}
+
+.app > :nth-child(2) {
+  /* BotSelector */
+  order: 2;
+}
+
+.app > :nth-child(3) {
+  /* ChatWindow */
+  order: 3;
+  flex: 1;
+  min-height: 0;
+}
+
+.app > :nth-child(4) {
+  /* InputArea */
+  order: 4;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .app {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .app {
+    font-size: 13px;
+  }
+}
+
+/* Animations */
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app {
+  animation: slideInUp 400ms ease-out;
+}
+
+/* Print styles */
+@media print {
+  .app {
+    height: auto;
+  }
+
+  .app > :nth-child(1),
+  .app > :nth-child(2),
+  .app > :nth-child(4) {
+    display: none;
+  }
+
+  .app > :nth-child(3) {
+    flex: none;
+  }
+}
