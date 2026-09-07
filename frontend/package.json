@@ -1,0 +1,35 @@
+{
+  "name": "legal-chatbot-frontend",
+  "version": "1.0.0",
+  "description": "Professional React frontend for legal chatbot system (Statutes & Case Precedents)",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "axios": "^1.6.0",
+    "classnames": "^2.3.2",
+    "date-fns": "^2.30.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-icons": "^5.0.1",
+    "react-markdown": "^9.0.1",
+    "zustand": "^4.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "typescript": "^5.0.0",
+    "vite": "^8.2.2"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  }
+}

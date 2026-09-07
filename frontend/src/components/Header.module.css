@@ -1,0 +1,221 @@
+.header {
+  background: linear-gradient(135deg, var(--neutral-900) 0%, var(--neutral-800) 100%);
+  color: white;
+  padding: 1rem 1.5rem;
+  box-shadow: var(--shadow-lg);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.headerContent {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  max-width: 100%;
+}
+
+.logoSection {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.logoIcon {
+  font-size: 2rem;
+  flex-shrink: 0;
+  animation: rotateIconSlow 20s linear infinite;
+}
+
+@keyframes rotateIconSlow {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.logoText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.appTitle {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.appSubtitle {
+  margin: 0;
+  font-size: 0.85rem;
+  opacity: 0.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.statusSection {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.statusIndicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 150ms ease-in-out;
+}
+
+.statusIndicator.online {
+  background-color: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+}
+
+.statusIndicator.offline {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+.statusDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.statusIndicator.offline .statusDot {
+  animation: none;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.statusText {
+  white-space: nowrap;
+}
+
+.headerButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background-color: rgba(255, 255, 255, 0.1);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 150ms ease-in-out;
+  white-space: nowrap;
+}
+
+.headerButton:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+.headerButton:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.headerButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .header {
+    padding: 0.75rem 1rem;
+  }
+
+  .headerContent {
+    gap: 1rem;
+  }
+
+  .logoIcon {
+    font-size: 1.5rem;
+  }
+
+  .appTitle {
+    font-size: 1.25rem;
+  }
+
+  .appSubtitle {
+    font-size: 0.75rem;
+  }
+
+  .statusText {
+    display: none;
+  }
+
+  .statusDot {
+    width: 8px;
+    height: 8px;
+  }
+
+  .headerButton span {
+    display: none;
+  }
+
+  .headerButton {
+    padding: 0.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .header {
+    padding: 0.5rem;
+  }
+
+  .headerContent {
+    gap: 0.5rem;
+  }
+
+  .logoIcon {
+    font-size: 1.25rem;
+  }
+
+  .appTitle {
+    font-size: 1rem;
+  }
+
+  .logoSection {
+    gap: 0.5rem;
+  }
+
+  .statusIndicator {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  .headerButton {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+  }
+}

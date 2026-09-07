@@ -18,4 +18,15 @@ models/
 # Vector Databases (Qdrant)
 qdrant_storage/
 qdrant_data/
-*.snapshot
+*.snapshotnode_modules/
+dist/
+build/
+.next/
+coverage/
+.env
+.env.*
+*.zip
+*.log
+__pycache__/
+*.pyc
+.DS_Store
