@@ -33,6 +33,8 @@ from transformers import (
     BitsAndBytesConfig,
 )
 from trl import SFTConfig, SFTTrainer
+import trl
+import inspect
 
 # --------------------------------------------------------------------------- #
 # Configuration
@@ -59,6 +61,8 @@ LEARNING_RATE = 2e-4
 
 
 def main():
+    print(f"[*] trl version: {trl.__version__}")
+
     if not DATASET_PATH.exists():
         raise SystemExit(
             f"Dataset not found at '{DATASET_PATH}'. Run data_prep.py first."
@@ -108,7 +112,7 @@ def main():
     dataset = load_dataset("json", data_files=str(DATASET_PATH), split="train")
     print(f"[+] {len(dataset)} training examples loaded.")
 
-    sft_config = SFTConfig(
+    sft_config_kwargs = dict(
         output_dir=str(OUTPUT_DIR),
         dataset_text_field="text",
         max_seq_length=MAX_SEQ_LENGTH,
@@ -131,13 +135,36 @@ def main():
         report_to="none",
     )
 
-    trainer = SFTTrainer(
+    # Different trl releases have renamed / dropped a few SFTConfig fields
+    # over time. Rather than guessing your exact installed version, only
+    # pass the kwargs your installed SFTConfig actually accepts, and warn
+    # about anything silently dropped.
+    valid_params = set(inspect.signature(SFTConfig.__init__).parameters)
+    dropped = [k for k in sft_config_kwargs if k not in valid_params]
+    if dropped:
+        print(f"[!] Your installed trl's SFTConfig does not accept these fields "
+              f"(skipping them): {dropped}")
+    sft_config_kwargs = {k: v for k, v in sft_config_kwargs.items() if k in valid_params}
+
+    sft_config = SFTConfig(**sft_config_kwargs)
+
+    # Confirm what actually landed, since a silently-dropped max_seq_length
+    # or packing setting would blow past the VRAM budget this script is tuned for.
+    print(f"[*] Effective max_seq_length: {getattr(sft_config, 'max_seq_length', 'NOT SET — check your trl version!')}")
+    print(f"[*] Effective packing: {getattr(sft_config, 'packing', 'NOT SET')}")
+
+    trainer_kwargs = dict(
         model=model,
         args=sft_config,
         train_dataset=dataset,
         peft_config=lora_config,
-        tokenizer=tokenizer,  # newer trl releases may rename this to `processing_class`
+        tokenizer=tokenizer,
+        processing_class=tokenizer,
     )
+    valid_trainer_params = set(inspect.signature(SFTTrainer.__init__).parameters)
+    trainer_kwargs = {k: v for k, v in trainer_kwargs.items() if k in valid_trainer_params}
+
+    trainer = SFTTrainer(**trainer_kwargs)
 
     print("[*] Trainable parameters:")
     trainer.model.print_trainable_parameters()
