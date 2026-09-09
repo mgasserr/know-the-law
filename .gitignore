@@ -1,32 +1,55 @@
-# Python / Backend Dependencies
-venv/
+# =============================================================================
+# know-the-law — root .gitignore
+# =============================================================================
+
+# --- Python virtual environments ---
 .venv/
-__pycache__/
-
-# Frontend Dependencies
-node_modules/
-dist/
-
-# Machine Learning & AI Models
-.cache/
-.hf_cache/
-models/
-*.safetensors
-*.pt
-*.gguf
-
-# Vector Databases (Qdrant)
-qdrant_storage/
-qdrant_data/
-*.snapshotnode_modules/
-dist/
-build/
-.next/
-coverage/
-.env
-.env.*
-*.zip
-*.log
+venv/
+env/
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+
+# --- Node / frontend ---
+node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Generated / downloaded artifacts (regenerable, don't belong in git) ---
+# ChromaDB vector index — rebuilt automatically from data/ PDFs on first run
+rag/qanoon_chroma_db/
+
+# Fine-tuning generated dataset — rebuilt by data_prep.py
+fine-tuning/data/finetune_dataset.jsonl
+
+# Trained LoRA adapter + any merged model — large binary checkpoints, don't commit
+fine-tuning/qwen-legal-qlora/
+fine-tuning/qwen-legal-merged/
+
+# Hugging Face / torch model cache, if it ever lands inside the repo instead of
+# the default user cache directory
+.cache/
+*.safetensors
+*.bin
+
+# --- Environment / secrets ---
+.env
+.env.local
+*.pem
+
+# --- Logs ---
+*.log
+
+# --- IDE / editor ---
+.vscode/
+.idea/
+*.swp
+
+# --- OS clutter ---
 .DS_Store
+Thumbs.db
+desktop.ini

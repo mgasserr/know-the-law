@@ -7,6 +7,11 @@ optional QLoRA fine-tuning pipeline.
 This guide assumes **zero prior setup** on your machine. Follow it top to bottom.
 
 ---
+## Demo video
+
+https://drive.google.com/file/d/1C1Lk22t9UJnJhPgvpCFqwq9ZURspL9DE/view?usp=drive_link
+
+---
 
 ## 0. Project structure
 
