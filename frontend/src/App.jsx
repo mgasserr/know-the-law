@@ -186,8 +186,6 @@ function App() {
           font-family: 'IBM Plex Sans Arabic', sans-serif;
           box-sizing: border-box;
           overflow: hidden;
-          border-radius: 14px;
-          box-shadow: 0 1px 0 rgba(0,0,0,0.06);
         }
         .ktl-app *, .ktl-app *::before, .ktl-app *::after { box-sizing: border-box; }
 
